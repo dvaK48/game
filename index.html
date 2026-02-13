@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e293b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="2048">
+  <title>2048</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+    #root {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    .game-board {
+      touch-action: none;
+      user-select: none;
+    }
+    .video-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const Game2048PWA = () => {
+      const [grid, setGrid] = useState([]);
+      const [score, setScore] = useState(0);
+      const [gameOver, setGameOver] = useState(false);
+      const [videoUrl, setVideoUrl] = useState(null);
+      const [isDragging, setIsDragging] = useState(false);
+      const videoRef = useRef(null);
+      const touchStartRef = useRef({ x: 0, y: 0 });
+      const dropZoneRef = useRef(null);
+      const dragLeaveTimerRef = useRef(null);
+
+      useEffect(() => {
+        initGame();
+      }, []);
+
+      const initGame = () => {
+        const newGrid = Array(4).fill(null).map(() => Array(4).fill(0));
+        addNewTile(newGrid);
+        addNewTile(newGrid);
+        setGrid(newGrid);
+        setScore(0);
+        setGameOver(false);
+      };
+
+      const addNewTile = (currentGrid) => {
+        const emptyCells = [];
+        for (let i = 0; i < 4; i++) {
+          for (let j = 0; j < 4; j++) {
+            if (currentGrid[i][j] === 0) emptyCells.push({ i, j });
+          }
+        }
+        if (emptyCells.length > 0) {
+          const { i, j } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+          currentGrid[i][j] = Math.random() < 0.9 ? 2 : 4;
+        }
+      };
+
+      const move = (direction) => {
+        if (gameOver) return;
+        
+        let newGrid = grid.map(row => [...row]);
+        let moved = false;
+        let newScore = score;
+
+        const moveLeft = () => {
+          for (let i = 0; i < 4; i++) {
+            let row = newGrid[i].filter(cell => cell !== 0);
+            for (let j = 0; j < row.length - 1; j++) {
+              if (row[j] === row[j + 1]) {
+                row[j] *= 2;
+                newScore += row[j];
+                row.splice(j + 1, 1);
+              }
+            }
+            while (row.length < 4) row.push(0);
+            if (JSON.stringify(row) !== JSON.stringify(newGrid[i])) moved = true;
+            newGrid[i] = row;
+          }
+        };
+
+        const rotate = () => {
+          newGrid = newGrid[0].map((_, i) => newGrid.map(row => row[i]).reverse());
+        };
+
+        if (direction === 'left') {
+          moveLeft();
+        } else if (direction === 'right') {
+          rotate(); rotate();
+          moveLeft();
+          rotate(); rotate();
+        } else if (direction === 'up') {
+          rotate(); rotate(); rotate();
+          moveLeft();
+          rotate();
+        } else if (direction === 'down') {
+          rotate();
+          moveLeft();
+          rotate(); rotate(); rotate();
+        }
+
+        if (moved) {
+          addNewTile(newGrid);
+          setGrid(newGrid);
+          setScore(newScore);
+          
+          if (!canMove(newGrid)) {
+            setGameOver(true);
+          }
+        }
+      };
+
+      const canMove = (currentGrid) => {
+        for (let i = 0; i < 4; i++) {
+          for (let j = 0; j < 4; j++) {
+            if (currentGrid[i][j] === 0) return true;
+            if (j < 3 && currentGrid[i][j] === currentGrid[i][j + 1]) return true;
+            if (i < 3 && currentGrid[i][j] === currentGrid[i + 1][j]) return true;
+          }
+        }
+        return false;
+      };
+
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            if (e.key === 'ArrowLeft') move('left');
+            if (e.key === 'ArrowRight') move('right');
+            if (e.key === 'ArrowUp') move('up');
+            if (e.key === 'ArrowDown') move('down');
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [grid, gameOver]);
+
+      const handleTouchStart = (e) => {
+        const touch = e.touches[0];
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      };
+
+      const handleTouchMove = (e) => {
+        e.preventDefault();
+      };
+
+      const handleTouchEnd = (e) => {
+        if (gameOver) return;
+        
+        const touch = e.changedTouches[0];
+        const deltaX = touch.clientX - touchStartRef.current.x;
+        const deltaY = touch.clientY - touchStartRef.current.y;
+        const minSwipeDistance = 30;
+
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+          if (Math.abs(deltaX) > minSwipeDistance) {
+            deltaX > 0 ? move('right') : move('left');
+          }
+        } else {
+          if (Math.abs(deltaY) > minSwipeDistance) {
+            deltaY > 0 ? move('down') : move('up');
+          }
+        }
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Clear any pending drag leave
+        if (dragLeaveTimerRef.current) {
+          clearTimeout(dragLeaveTimerRef.current);
+          dragLeaveTimerRef.current = null;
+        }
+        
+        if (!isDragging) {
+          setIsDragging(true);
+        }
+      };
+
+      const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Debounce the drag leave to prevent flickering
+        if (dragLeaveTimerRef.current) {
+          clearTimeout(dragLeaveTimerRef.current);
+        }
+        
+        dragLeaveTimerRef.current = setTimeout(() => {
+          setIsDragging(false);
+        }, 50);
+      };
+
+      const handleDrop = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Clear any pending drag leave
+        if (dragLeaveTimerRef.current) {
+          clearTimeout(dragLeaveTimerRef.current);
+          dragLeaveTimerRef.current = null;
+        }
+        
+        setIsDragging(false);
+
+        const file = e.dataTransfer?.files[0];
+        if (file) {
+          await processZipFile(file);
+        }
+      };
+
+      useEffect(() => {
+        const dropZone = dropZoneRef.current;
+        if (!dropZone) return;
+
+        const handlePaste = async (e) => {
+          const items = e.clipboardData?.items;
+          if (!items) return;
+
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file') {
+              const file = items[i].getAsFile();
+              if (file) {
+                e.preventDefault();
+                await processZipFile(file);
+              }
+            }
+          }
+        };
+
+        const handleDragEnterMobile = (e) => {
+          if (e.dataTransfer?.types?.includes('Files')) {
+            e.preventDefault();
+            setIsDragging(true);
+          }
+        };
+
+        const handleDragOverMobile = (e) => {
+          if (e.dataTransfer?.types?.includes('Files')) {
+            e.preventDefault();
+            setIsDragging(true);
+          }
+        };
+
+        const handleDropMobile = async (e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          
+          const file = e.dataTransfer?.files[0];
+          if (file) {
+            await processZipFile(file);
+          }
+        };
+
+        window.addEventListener('paste', handlePaste);
+        dropZone.addEventListener('dragenter', handleDragEnterMobile);
+        dropZone.addEventListener('dragover', handleDragOverMobile);
+        dropZone.addEventListener('drop', handleDropMobile);
+
+        return () => {
+          // Clean up timer
+          if (dragLeaveTimerRef.current) {
+            clearTimeout(dragLeaveTimerRef.current);
+          }
+          
+          window.removeEventListener('paste', handlePaste);
+          if (dropZone) {
+            dropZone.removeEventListener('dragenter', handleDragEnterMobile);
+            dropZone.removeEventListener('dragover', handleDragOverMobile);
+            dropZone.removeEventListener('drop', handleDropMobile);
+          }
+        };
+      }, []);
+
+      const processZipFile = async (file) => {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          let firstVideo = null;
+
+          for (const [filename, zipEntry] of Object.entries(zip.files)) {
+            if (!zipEntry.dir) {
+              const ext = filename.toLowerCase().split('.').pop();
+              if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) {
+                firstVideo = zipEntry;
+                break;
+              }
+            }
+          }
+
+          if (firstVideo) {
+            const blob = await firstVideo.async('blob');
+            const url = URL.createObjectURL(blob);
+            
+            if (videoUrl) {
+              URL.revokeObjectURL(videoUrl);
+            }
+            
+            setVideoUrl(url);
+          }
+        } catch (error) {
+          console.error('Error:', error);
+        }
+      };
+
+      const getTileColor = (value) => {
+        const colors = {
+          0: '#334155',
+          2: '#cbd5e1',
+          4: '#94a3b8',
+          8: '#fb923c',
+          16: '#f97316',
+          32: '#ea580c',
+          64: '#dc2626',
+          128: '#fbbf24',
+          256: '#f59e0b',
+          512: '#d97706',
+          1024: '#b45309',
+          2048: '#92400e',
+        };
+        return colors[value] || '#1e293b';
+      };
+
+      const closeVideo = () => {
+        if (videoUrl) {
+          URL.revokeObjectURL(videoUrl);
+        }
+        setVideoUrl(null);
+        if (videoRef.current) {
+          videoRef.current.src = '';
+        }
+      };
+
+      if (videoUrl) {
+        return (
+          <div className="video-container bg-black flex items-center justify-center">
+            <div className="relative w-full h-full flex flex-col">
+              <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10">
+                <button
+                  onClick={closeVideo}
+                  className="bg-slate-800 bg-opacity-80 hover:bg-opacity-100 text-slate-100 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-semibold transition text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                controls
+                autoPlay
+                playsInline
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div 
+          ref={dropZoneRef}
+          className="fixed inset-0 bg-slate-800 flex items-center justify-center p-4"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {isDragging && (
+            <div className="fixed inset-0 bg-blue-600 bg-opacity-80 flex items-center justify-center z-50 pointer-events-none">
+              <div className="text-6xl">👀</div>
+            </div>
+          )}
+          
+          <div className="w-full max-w-md">
+            <div className="mb-4 text-right">
+              <span className="text-slate-300 text-sm sm:text-base">объедините плитки, чтобы достичь </span>
+              <span className="text-slate-100 text-4xl sm:text-5xl font-bold">2048</span>
+            </div>
+            
+            <div className="bg-slate-700 rounded-xl shadow-xl p-3 sm:p-4">
+              <div className="flex justify-between items-center mb-3">
+                <div className="text-lg sm:text-xl font-bold text-slate-100">{score}</div>
+                <button
+                  onClick={initGame}
+                  className="bg-slate-600 hover:bg-slate-500 text-slate-100 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-semibold transition text-sm"
+                >
+                  Новая игра
+                </button>
+              </div>
+
+              <div className="game-board relative bg-slate-800 rounded-lg p-2 sm:p-3">
+                <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                  {grid.map((row, i) =>
+                    row.map((cell, j) => (
+                      <div
+                        key={`${i}-${j}`}
+                        className="aspect-square rounded-lg flex items-center justify-center text-xl sm:text-2xl font-bold transition-all duration-150"
+                        style={{
+                          backgroundColor: getTileColor(cell),
+                          color: cell === 0 ? '#334155' : (cell === 2 || cell === 4 ? '#1e293b' : '#f8fafc'),
+                        }}
+                      >
+                        {cell !== 0 && cell}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {gameOver && (
+                  <div className="absolute inset-0 bg-slate-900 bg-opacity-90 rounded-lg flex items-center justify-center">
+                    <div className="text-slate-100 text-center px-4">
+                      <div className="text-2xl sm:text-3xl font-bold mb-3">Игра окончена!</div>
+                      <div className="text-lg sm:text-xl mb-3">{score}</div>
+                      <button
+                        onClick={initGame}
+                        className="bg-slate-600 hover:bg-slate-500 text-slate-100 px-4 sm:px-5 py-2 rounded-lg font-semibold transition text-sm"
+                      >
+                        Играть снова
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<Game2048PWA />, document.getElementById('root'));
+  </script>
+  
+  <script>
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((registration) => {
+            console.log('ServiceWorker registered:', registration.scope);
+          })
+          .catch((error) => {
+            console.log('ServiceWorker registration failed:', error);
+          });
+      });
+    }
+  </script>
+</body>
+</html>
