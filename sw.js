@@ -1,10 +1,10 @@
-const CACHE_NAME = '2048-pwa-v2';
+const CACHE_NAME = '2048-pwa-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       // Cache the HTML file first
-      const htmlCache = cache.add('2048-pwa.html').catch(err => {
+      const htmlCache = cache.add('./index.html').catch(err => {
         console.log('HTML cache error (ignore if using different path):', err);
       });
       
@@ -28,7 +28,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
-        .catch(() => caches.match('2048-pwa.html'))
+        .catch(() => caches.match('./index.html'))
         .then(response => response || new Response('Offline'))
     );
     return;
