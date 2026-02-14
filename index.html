@@ -33,14 +33,6 @@
       touch-action: none;
       user-select: none;
     }
-    .video-container {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 50;
-    }
   </style>
 </head>
 <body>
@@ -53,9 +45,8 @@
       const [grid, setGrid] = useState([]);
       const [score, setScore] = useState(0);
       const [gameOver, setGameOver] = useState(false);
-      const [videoUrl, setVideoUrl] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
-      const videoRef = useRef(null);
+      const [isLoading, setIsLoading] = useState(false);
       const touchStartRef = useRef({ x: 0, y: 0 });
       const dropZoneRef = useRef(null);
       const dragLeaveTimerRef = useRef(null);
@@ -304,16 +295,19 @@
       }, []);
 
       const processZipFile = async (file) => {
+        setIsLoading(true);
         try {
           const arrayBuffer = await file.arrayBuffer();
           const zip = await JSZip.loadAsync(arrayBuffer);
           let firstVideo = null;
+          let videoFilename = null;
 
           for (const [filename, zipEntry] of Object.entries(zip.files)) {
             if (!zipEntry.dir) {
               const ext = filename.toLowerCase().split('.').pop();
               if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) {
                 firstVideo = zipEntry;
+                videoFilename = filename;
                 break;
               }
             }
@@ -323,14 +317,23 @@
             const blob = await firstVideo.async('blob');
             const url = URL.createObjectURL(blob);
             
-            if (videoUrl) {
-              URL.revokeObjectURL(videoUrl);
-            }
+            // Create temporary link to download/open video
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = videoFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
             
-            setVideoUrl(url);
+            // Clean up
+            setTimeout(() => {
+              URL.revokeObjectURL(url);
+            }, 100);
           }
         } catch (error) {
           console.error('Error:', error);
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -352,41 +355,6 @@
         return colors[value] || '#1e293b';
       };
 
-      const closeVideo = () => {
-        if (videoUrl) {
-          URL.revokeObjectURL(videoUrl);
-        }
-        setVideoUrl(null);
-        if (videoRef.current) {
-          videoRef.current.src = '';
-        }
-      };
-
-      if (videoUrl) {
-        return (
-          <div className="video-container bg-black flex items-center justify-center">
-            <div className="relative w-full h-full flex flex-col">
-              <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10">
-                <button
-                  onClick={closeVideo}
-                  className="bg-slate-800 bg-opacity-80 hover:bg-opacity-100 text-slate-100 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-semibold transition text-sm"
-                >
-                  ✕
-                </button>
-              </div>
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                controls
-                autoPlay
-                playsInline
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
-        );
-      }
-
       return (
         <div 
           ref={dropZoneRef}
@@ -404,12 +372,16 @@
             </div>
           )}
           
-          <div className="w-full max-w-md">
-            <div className="mb-4 text-right">
-              <span className="text-slate-300 text-sm sm:text-base"> </span>
-              <span className="text-slate-100 text-4xl sm:text-5xl font-bold">2048</span>
+          {isLoading && (
+            <div className="fixed inset-0 bg-slate-900 bg-opacity-90 flex items-center justify-center z-50">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-slate-600 border-t-slate-100 mb-4"></div>
+                <div className="text-slate-100 text-xl font-semibold">Распаковка...</div>
+              </div>
             </div>
-            
+          )}
+          
+          <div className="w-full max-w-md">
             <div className="bg-slate-700 rounded-xl shadow-xl p-3 sm:p-4">
               <div className="flex justify-between items-center mb-3">
                 <div className="text-lg sm:text-xl font-bold text-slate-100">{score}</div>
