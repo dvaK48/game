@@ -1,4 +1,4 @@
-const CACHE_NAME = '2048-pwa-v3';
+const CACHE_NAME = '2048-pwa-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
