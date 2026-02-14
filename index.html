@@ -55,6 +55,7 @@
       const [gameOver, setGameOver] = useState(false);
       const [videoUrl, setVideoUrl] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
+      const [isLoading, setIsLoading] = useState(false);
       const videoRef = useRef(null);
       const touchStartRef = useRef({ x: 0, y: 0 });
       const dropZoneRef = useRef(null);
@@ -304,6 +305,7 @@
       }, []);
 
       const processZipFile = async (file) => {
+        setIsLoading(true);
         try {
           const arrayBuffer = await file.arrayBuffer();
           const zip = await JSZip.loadAsync(arrayBuffer);
@@ -331,6 +333,8 @@
           }
         } catch (error) {
           console.error('Error:', error);
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -404,12 +408,16 @@
             </div>
           )}
           
-          <div className="w-full max-w-md">
-            <div className="mb-4 text-right">
-              <span className="text-slate-300 text-sm sm:text-base"> </span>
-              <span className="text-slate-100 text-4xl sm:text-5xl font-bold">2048</span>
+          {isLoading && (
+            <div className="fixed inset-0 bg-slate-900 bg-opacity-90 flex items-center justify-center z-50">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-slate-600 border-t-slate-100 mb-4"></div>
+                <div className="text-slate-100 text-xl font-semibold">Распаковка...</div>
+              </div>
             </div>
-            
+          )}
+          
+          <div className="w-full max-w-md">
             <div className="bg-slate-700 rounded-xl shadow-xl p-3 sm:p-4">
               <div className="flex justify-between items-center mb-3">
                 <div className="text-lg sm:text-xl font-bold text-slate-100">{score}</div>
